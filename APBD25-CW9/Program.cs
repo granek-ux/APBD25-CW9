@@ -1,12 +1,12 @@
 // using APBD25_CW9;
-// using APBD25_CW9.Services;
+using APBD25_CW9.Service;
 using Swashbuckle.AspNetCore.SwaggerUI;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-// builder.Services.AddScoped<ITripsService, TripsService>();
-// builder.Services.AddScoped<IClientsService, ClientsService>();
+builder.Services.AddScoped<IWarehouseService, WarehouseService>();
+
 builder.Services.AddSwaggerGen();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
