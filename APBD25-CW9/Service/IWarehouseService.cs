@@ -7,5 +7,6 @@ public interface IWarehouseService
 {
     
     public Task<int> sqlOperation(WarehouseDto warehouseDto,CancellationToken cancellationToken);
-    
+    public Task<int> ProcedureAsync(WarehouseDto warehouseDto, CancellationToken cancellationToken);
+
 }

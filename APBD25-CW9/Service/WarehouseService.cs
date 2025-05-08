@@ -2,6 +2,7 @@
 using System.Data.Common;
 using APBD25_CW9.Models;
 using Microsoft.Data.SqlClient;
+using NuGet.Packaging.Signing;
 
 namespace APBD25_CW9.Service;
 
@@ -20,96 +21,127 @@ public class WarehouseService : IWarehouseService
     {
         if (warehouseDto.Amount <= 0)
             return -400;
-        string productCheckCommand = @"SELECT COUNT(*) from Product where IdProduct =@IdProduct;";
+        string productCheckCommand = @"SELECT Price from Product where IdProduct =@IdProduct;";
         string warehouseCheckCommand = @"Select COUNT(*) from [Warehouse] where IdWarehouse = @IdWarehouse";
-        string orderCheckCommand = @"SELECT IdOrder,Amount, CreatedAt from [Order]  where IdProduct = @IdProduct";
+        string orderCheckCommand =
+            @"SELECT IdOrder, CreatedAt from [Order]  where IdProduct = @IdProduct and Amount = @Amount;";
         string Product_WarehouseCheckCommand = "SELECT COUNT(*) FROM Product_Warehouse where IdOrder =@IdOrder";
+        string orderUpdateCommand = "UPDATE [Order] set FulfilledAt = @DateNow where IdOrder = @IdOrder;";
+        string intsetProduct_WarehouseCommand = @"Insert Into Product_Warehouse (IdWarehouse, IdProduct, IdOrder, Amount, Price, CreatedAt) 
+                                                    values (@IdWarehouse, @IdProduct, @IdOrder, @Amount, @Price, @CreatedAt);SELECT SCOPE_IDENTITY();";
 
         using (SqlConnection conn = new SqlConnection(_connectionString))
         {
+            float productPrice = 0;
             await conn.OpenAsync(cancellationToken);
             using (SqlCommand cmd = new SqlCommand(productCheckCommand, conn))
             {
+                var idOrder = -1;
                 cmd.Parameters.AddWithValue("@IdProduct", warehouseDto.IdProduct);
 
-                var check = (int)(await cmd.ExecuteScalarAsync());
-                if (check == 0)
+                var checkP = (float)(await cmd.ExecuteScalarAsync(cancellationToken));
+                if (checkP == 0)
                     return -404;
-            }
+                productPrice = checkP;
 
-            using (SqlCommand cmd = new SqlCommand(warehouseCheckCommand, conn))
-            {
+
+                cmd.Parameters.Clear();
+
+                cmd.CommandText = warehouseCheckCommand;
+
                 cmd.Parameters.AddWithValue("@IdWarehouse", warehouseDto.IdWarehouse);
-                var check = (int)(await cmd.ExecuteScalarAsync());
-                if (check == 0)
-                    return -404;
-            }
 
-            var idOrder = -1;
-            using (SqlCommand cmd = new SqlCommand())
-            {
-                var amount = -1;
                 DateTime createdAt = DateTime.MaxValue;
+
+
+                var checkW = (int)(await cmd.ExecuteScalarAsync(cancellationToken));
+                if (checkW == 0)
+                    return -404;
+
+                cmd.Parameters.Clear();
+
+                cmd.CommandText = orderCheckCommand;
+
+
                 cmd.Parameters.AddWithValue("@IdProduct", warehouseDto.IdProduct);
+                cmd.Parameters.AddWithValue("@Amount", warehouseDto.Amount);
+
+
                 using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
                 {
-                    while (await reader.ReadAsync())
+                    while (await reader.ReadAsync(cancellationToken))
                     {
                         idOrder = reader.GetInt32(0);
-                        amount = reader.GetInt32(1);
-                        createdAt = reader.GetDateTime(2);
+                        createdAt = reader.GetDateTime(1);
                     }
 
-                    if (amount == -1)
+                    if (idOrder == -1)
                         return -404;
-                    if (amount < warehouseDto.Amount && warehouseDto.CreatedAt > createdAt)
+
+                    if (warehouseDto.CreatedAt > createdAt)
                         return -400;
                 }
-            }
 
-            using (SqlCommand cmd = new SqlCommand(Product_WarehouseCheckCommand, conn))
-            {
-                var check = (int)(await cmd.ExecuteScalarAsync());
-                if (check != 0)
-                    return -404;
-            }
+                cmd.Parameters.Clear();
 
-            using (SqlCommand cmd = new SqlCommand(warehouseCheckCommand, conn))
-            {
-                // BEGIN TRANSACTION
 
                 DbTransaction transaction = await conn.BeginTransactionAsync();
                 cmd.Transaction = transaction as SqlTransaction;
                 try
                 {
+                    DateTime timeNow = DateTime.Now;
+                    cmd.CommandText = orderUpdateCommand;
+                    cmd.Parameters.AddWithValue("@IdOrder", idOrder);
+                    cmd.Parameters.AddWithValue("@DateNow", timeNow);
+                    
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                    
+                    
+                    cmd.Parameters.Clear();
+                    cmd.CommandText = intsetProduct_WarehouseCommand;
+                    
+                    productPrice *= warehouseDto.Amount;
+                    cmd.Parameters.AddWithValue("@IdWarehouse", warehouseDto.IdWarehouse);
+                    cmd.Parameters.AddWithValue("@IdProduct", warehouseDto.IdProduct);
+                    cmd.Parameters.AddWithValue("@IdOrder", idOrder);
+                    cmd.Parameters.AddWithValue("@Amount", warehouseDto.Amount);
+                    cmd.Parameters.AddWithValue("@Price", productPrice);
+                    cmd.Parameters.AddWithValue("@CreatedAt", timeNow);
+                    
+                    var insertedId = Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
+                    
                     await transaction.CommitAsync();
+                    return insertedId;
                 }
                 catch (Exception e)
                 {
                     await transaction.RollbackAsync();
                     throw;
                 }
-                // END TRANSACTION
             }
         }
 
-        throw new NotImplementedException();
+        return 0;
     }
-    
-    public async Task ProcedureAsync()
+
+    public async Task<int> ProcedureAsync(WarehouseDto warehouseDto, CancellationToken cancellationToken)
     {
         await using SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("Default"));
         await using SqlCommand command = new SqlCommand();
-        
+
         command.Connection = connection;
-        await connection.OpenAsync();
-        
-        command.CommandText = "NazwaProcedury";
+        await connection.OpenAsync(cancellationToken);
+
+        command.CommandText = "AddProductToWarehouse";
         command.CommandType = CommandType.StoredProcedure;
-        
-        command.Parameters.AddWithValue("@Id", 2);
-        
-        await command.ExecuteNonQueryAsync();
-        
+
+        command.Parameters.AddWithValue("@IdProduct", warehouseDto.IdProduct);
+        command.Parameters.AddWithValue("@IdWarehouse", warehouseDto.IdWarehouse);
+        command.Parameters.AddWithValue("@Amount", warehouseDto.Amount);
+        command.Parameters.AddWithValue("@CreatedAt", warehouseDto.CreatedAt);
+
+        int result = (int) await command.ExecuteScalarAsync(cancellationToken);
+
+        return result;
     }
 }

@@ -23,9 +23,17 @@ namespace APBD25_CW9.Controlers
             var code = await _warehouseService.sqlOperation(warehouseDto,cancellationToken);
             
             if (code == -400)
-                return BadRequest("Ammount too small");
+                return BadRequest();
             if (code == -404)
                 return NotFound();
+            return Ok(code);
+        }
+
+        [HttpPost("/proceudra")]
+        public async Task<IActionResult> GetWarehouseProcedure([FromBody] WarehouseDto warehouseDto,
+            CancellationToken cancellationToken)
+        {
+            var code = await _warehouseService.ProcedureAsync(warehouseDto,cancellationToken);
             return Ok(code);
         }
     }
