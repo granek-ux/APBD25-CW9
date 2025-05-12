@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using System.Data.Common;
+using APBD25_CW9.Exceptions;
 using APBD25_CW9.Models;
 using Microsoft.Data.SqlClient;
 using NuGet.Packaging.Signing;
@@ -20,7 +21,7 @@ public class WarehouseService : IWarehouseService
     public async Task<int> sqlOperation(WarehouseDto warehouseDto, CancellationToken cancellationToken)
     {
         if (warehouseDto.Amount <= 0)
-            return -400;
+             throw new BadRequestException("Amount must be greater than 0");
         string productCheckCommand = @"SELECT Price from Product where IdProduct =@IdProduct;";
         string warehouseCheckCommand = @"Select COUNT(*) from [Warehouse] where IdWarehouse = @IdWarehouse";
         string orderCheckCommand =
@@ -41,7 +42,7 @@ public class WarehouseService : IWarehouseService
 
                 var checkP = (float)(await cmd.ExecuteScalarAsync(cancellationToken));
                 if (checkP == 0)
-                    return -404;
+                    throw new NotFoundException("Product not found");
                 productPrice = checkP;
 
 
@@ -56,7 +57,7 @@ public class WarehouseService : IWarehouseService
 
                 var checkW = (int)(await cmd.ExecuteScalarAsync(cancellationToken));
                 if (checkW == 0)
-                    return -404;
+                    throw new NotFoundException("Warehouse not found");
 
                 cmd.Parameters.Clear();
 
@@ -76,10 +77,10 @@ public class WarehouseService : IWarehouseService
                     }
 
                     if (idOrder == -1)
-                        return -404;
+                        throw new NotFoundException("Order not found");
 
                     if (warehouseDto.CreatedAt > createdAt)
-                        return -400;
+                        throw new ConflictException("Wrong date");
                 }
 
                 cmd.Parameters.Clear();
@@ -116,7 +117,7 @@ public class WarehouseService : IWarehouseService
                 catch (Exception e)
                 {
                     await transaction.RollbackAsync();
-                    throw;
+                    throw new ConflictException("Confict in instering");
                 }
             }
         }

@@ -1,3 +1,4 @@
+using APBD25_CW9.Exceptions;
 using APBD25_CW9.Models;
 using APBD25_CW9.Service;
 using Microsoft.AspNetCore.Http;
@@ -19,14 +20,24 @@ namespace APBD25_CW9.Controlers
         [HttpPost]
         public async Task<IActionResult> GetWarehouse([FromBody] WarehouseDto warehouseDto, CancellationToken cancellationToken)
         {
-        
-            var code = await _warehouseService.sqlOperation(warehouseDto,cancellationToken);
-            
-            if (code == -400)
-                return BadRequest();
-            if (code == -404)
-                return NotFound();
-            return Ok(code);
+            try
+            {
+                var code = await _warehouseService.sqlOperation(warehouseDto, cancellationToken);
+
+                return Ok(code);
+            }
+            catch (NotFoundException e)
+            {
+                return NotFound(e.Message);
+            }
+            catch (BadRequestException e)
+            {
+                return BadRequest(e.Message);
+            }
+            catch (ConflictException e)
+            {
+                return Conflict(e.Message);
+            }
         }
 
         [HttpPost("/proceudra")]
